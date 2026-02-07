@@ -139,8 +139,8 @@ export default function Compressor() {
   return (
     <div className="grow flex flex-col gap-4 h-full w-full overflow-hidden">
       <h1 className="text-2xl font-bold">Video Compressor</h1>
-      <div className="grow grid items-start md:grid-cols-3 gap-4 w-full h-full mx-auto overflow-hidden">
-        <div className="relative flex flex-col gap-2 md:col-span-2 border p-2 rounded-md bg-card h-full min-h-[300px] max-h-[847px]">
+      <div className="grow grid items-start md:grid-cols-[1fr_290px] gap-4 w-full h-full mx-auto overflow-hidden">
+        <div className="relative flex flex-col gap-2 border p-2 rounded-md bg-card h-full min-h-[300px] max-h-[847px]">
           <div className="relative flex items-center justify-center h-full">
             {files.length === 0 && !isFfmpegLoading && (
               <Dropzone
@@ -228,7 +228,7 @@ export default function Compressor() {
             )}
           </AnimatePresence>
         </div>
-        <aside className="flex flex-col col-span-1 gap-4 h-full overflow-hidden">
+        <aside className="flex flex-col gap-4 h-full overflow-hidden">
           <div className="flex flex-col border p-1 bg-card rounded-md overflow-hidden">
             <ScrollArea className="p-2">
               <div className="flex p-1 flex-col gap-2 grow">
