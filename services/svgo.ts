@@ -1,7 +1,6 @@
 import { Config } from "svgo";
 
-//@ts-expect-error import not found
-import { optimize } from "svgo/dist/svgo.browser";
+import { optimize } from "svgo/browser";
 
 class SVGO {
   public optimizeSVG(svg: string, options: Config): string {
