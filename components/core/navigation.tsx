@@ -38,6 +38,12 @@ const components: { title: string; href: string; description: string }[] = [
     href: "/meta-verifier",
     description: "Verify meta tags of any website.",
   },
+  {
+    title: "Aspect Ratio Finder",
+    href: "/aspect-ratio",
+    description:
+      "Find the exact aspect ratio of any dimensions and the closest clean ratios.",
+  },
   // {
   //   title: "SVG Minifier",
   //   href: "/svg-minifier",
