@@ -1,7 +1,10 @@
 "use client";
 
 import { getRandomId } from "@/lib/get-random-id";
-import { getVideoMetadata } from "@/features/compression/lib/get-video-metadata";
+import {
+  getVideoMetadata,
+  VideoMetadata,
+} from "@/features/compression/lib/get-video-metadata";
 import { qualityToCrf } from "@/features/compression/lib/quality-to-crf";
 import { FFmpeg, FFFSType } from "@ffmpeg/ffmpeg";
 import { toBlobURL } from "@ffmpeg/util";
@@ -52,6 +55,42 @@ const DEFAULT_FPS = 30;
 const INPUT_DIR = "/input";
 const TIMEOUT = -1;
 
+const DECODE_HEAP_BUDGET = 128 * 1024 * 1024;
+const DECODE_BYTES_PER_PIXEL_PER_THREAD = 4;
+
+const decodeArgs = (metadata: VideoMetadata | null): string[] => {
+  const cores = navigator.hardwareConcurrency || 4;
+  const pixels = metadata ? metadata.width * metadata.height : 0;
+  if (!pixels) return ["-threads", String(Math.min(cores, 4))];
+  const bytesPerThread = pixels * DECODE_BYTES_PER_PIXEL_PER_THREAD;
+  const threads = Math.min(
+    cores,
+    Math.max(1, Math.round(DECODE_HEAP_BUDGET / bytesPerThread))
+  );
+  return ["-threads", String(threads)];
+};
+
+const tryGetVideoMetadata = (file: File): Promise<VideoMetadata | null> =>
+  getVideoMetadata(file).catch(() => null);
+
+const AUDIO_COPY_UNSUPPORTED_LOG = "codec not currently supported in container";
+const LOG_TAIL_SIZE = 20;
+
+const swapAudioCopyForAac = (args: string[]): string[] | null => {
+  const out = [...args];
+  const allIdx = out.findIndex((a, i) => a === "-c" && out[i + 1] === "copy");
+  if (allIdx !== -1) {
+    out.splice(allIdx, 2, "-c:v", "copy", "-c:a", "aac");
+    return out;
+  }
+  const audioIdx = out.findIndex((a, i) => a === "-c:a" && out[i + 1] === "copy");
+  if (audioIdx !== -1) {
+    out.splice(audioIdx + 1, 1, "aac");
+    return out;
+  }
+  return null;
+};
+
 /**
  * Sanitizes a filename by replacing non-alphanumeric characters with underscores
  * and converting to lowercase
@@ -64,9 +103,37 @@ const sanitizeFileName = (name: string) =>
 export class FFmpegService {
   public ffmpeg: FFmpeg;
   private abortController: AbortController | null = null;
+  private logTail: string[] = [];
 
   constructor() {
     this.ffmpeg = new FFmpeg();
+    this.ffmpeg.on("log", ({ message }) => {
+      this.logTail.push(message);
+      if (this.logTail.length > LOG_TAIL_SIZE) this.logTail.shift();
+    });
+  }
+
+  /**
+   * Runs an FFmpeg command. When stream-copied audio is rejected by the
+   * output container (the wasm build's mp4 muxer cannot store PCM), retries
+   * once with the audio re-encoded to AAC.
+   * @param args - FFmpeg command arguments
+   * @param signal - AbortSignal for cancellation
+   * @returns Promise resolving to the FFmpeg exit code
+   */
+  private async exec(args: string[], signal: AbortSignal): Promise<number> {
+    this.logTail = [];
+    const result = await this.ffmpeg.exec(args, TIMEOUT, { signal });
+    if (result === 0) return result;
+
+    const audioCopyRejected = this.logTail.some((line) =>
+      line.includes(AUDIO_COPY_UNSUPPORTED_LOG)
+    );
+    const fallbackArgs = audioCopyRejected ? swapAudioCopyForAac(args) : null;
+    if (!fallbackArgs) return result;
+
+    this.logTail = [];
+    return this.ffmpeg.exec(fallbackArgs, TIMEOUT, { signal });
   }
 
   /**
@@ -111,7 +178,8 @@ export class FFmpegService {
     }
 
     if (codec) {
-      args.push("-c:v", codec);
+      // Force 8-bit 4:2:0; browsers cannot play 4:2:2 or 10-bit h264
+      args.push("-c:v", codec, "-pix_fmt", "yuv420p");
     }
 
     if (quality) {
@@ -150,6 +218,7 @@ export class FFmpegService {
   ): Promise<TranscodeOutput> {
     this.abortController = new AbortController();
     const abortSignal = signal || this.abortController.signal;
+    const metadata = await tryGetVideoMetadata(file);
     const sanitizedInputFileName = sanitizeFileName(file.name);
     const inputDir = `${INPUT_DIR}-${getRandomId()}`;
     const outputFileName = `${sanitizedInputFileName
@@ -163,10 +232,15 @@ export class FFmpegService {
 
     const args = this.transcodeOptionsToArgs(options);
 
-    const result = await this.ffmpeg.exec(
-      ["-i", `${inputDir}/${file.name}`, ...args, outputFileName],
-      TIMEOUT,
-      { signal: abortSignal }
+    const result = await this.exec(
+      [
+        ...decodeArgs(metadata),
+        "-i",
+        `${inputDir}/${file.name}`,
+        ...args,
+        outputFileName,
+      ],
+      abortSignal
     );
 
     if (result !== 0) {
@@ -210,6 +284,8 @@ export class FFmpegService {
 
     const thumbResult = await this.ffmpeg.exec(
       [
+        "-threads",
+        "1",
         "-i",
         `${inputDir}/${file.name}`,
         "-frames:v",
@@ -261,13 +337,12 @@ export class FFmpegService {
     this.abortController = new AbortController();
     const abortSignal = signal || this.abortController.signal;
 
-    const { duration: totalDuration, sizeMB: originalSizeMB } =
-      await getVideoMetadata(file);
+    const metadata = await tryGetVideoMetadata(file);
 
-    const sampleDuration = Math.min(
-      options.previewDuration || DEFAULT_PREVIEW_DURATION,
-      totalDuration
-    );
+    const previewDuration = options.previewDuration || DEFAULT_PREVIEW_DURATION;
+    const sampleDuration = metadata
+      ? Math.min(previewDuration, metadata.duration)
+      : previewDuration;
     const sampleOutputFileName = `sample_output-${getRandomId()}.mp4`;
     const originalOutputFileName = `original_output-${getRandomId()}.mp4`;
     const inputDir = `${INPUT_DIR}-${getRandomId()}`;
@@ -278,8 +353,8 @@ export class FFmpegService {
 
     const args = this.transcodeOptionsToArgs(options);
 
-    const result = await Promise.all([
-      this.ffmpeg.exec(
+    const result = [
+      await this.exec(
         [
           "-ss",
           "0",
@@ -291,11 +366,11 @@ export class FFmpegService {
           "copy",
           originalOutputFileName,
         ],
-        TIMEOUT,
-        { signal: abortSignal }
+        abortSignal
       ),
-      this.ffmpeg.exec(
+      await this.exec(
         [
+          ...decodeArgs(metadata),
           "-ss",
           "0",
           "-i",
@@ -305,10 +380,9 @@ export class FFmpegService {
           ...args,
           sampleOutputFileName,
         ],
-        TIMEOUT,
-        { signal: abortSignal }
+        abortSignal
       ),
-    ]);
+    ];
 
     if (result.some((r) => r !== 0)) {
       await this.ffmpeg.unmount(inputDir);
@@ -324,7 +398,7 @@ export class FFmpegService {
     const originalOutputSize = (originalOutputData as Uint8Array).length;
 
     const compressionRatio = sampleOutputSize / originalOutputSize;
-    const estimatedSizeMB = originalSizeMB * compressionRatio;
+    const estimatedSizeMB = (file.size / 1024 / 1024) * compressionRatio;
 
     // Clean up
     await this.ffmpeg.deleteFile(sampleOutputFileName);
