@@ -41,7 +41,7 @@ export default function MetaVerifier() {
                   Enter a the URL of the website you want to verify
                 </h2>
                 <p className="text-sm text-center text-muted-foreground max-w-[500px]">
-                  Verify your website's meta tags, favicons, and web manifest
+                  Verify your website&apos;s meta tags, favicons, and web manifest
                   for SEO, browser compatibility, and PWA standards.
                 </p>
               </div>
@@ -136,7 +136,7 @@ export default function MetaVerifier() {
                     compatibility, and PWA requirements. While some checks (like
                     charset and viewport meta tags) are essential, others (like
                     Microsoft Tile Image or Web App Manifest) may only be
-                    necessary depending on your website's needs. The tool
+                    necessary depending on your website&apos;s needs. The tool
                     validates both meta tag presence and asset specifications
                     (like favicon dimensions and formats).
                   </p>

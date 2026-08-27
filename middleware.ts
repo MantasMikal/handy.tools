@@ -10,7 +10,9 @@ const ratelimit = new Ratelimit({
 export async function middleware(request: NextRequest) {
   console.log("Incoming request", request.url);
   // check if the request is a server action and apply the rate limiting then
-  const ip = request.ip ?? "121.0.0.1";
+  const ip =
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    "121.0.0.1";
   const { success } = await ratelimit.limit(ip);
   if (!success) {
     return Response.json(

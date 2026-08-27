@@ -93,6 +93,9 @@ class ImageCompressor {
         ? "jxl"
         : image.type.replace("image/", "");
       const imageData = await this.decode(sourceType, image.arrayBuffer);
+      if (!imageData) {
+        throw new Error(`Failed to decode image of type "${sourceType}"`);
+      }
       const compressedImage = await this.encode(imageData, options);
       const imageBlob = new Blob([compressedImage], {
         type: `image/${options.outputType}`,

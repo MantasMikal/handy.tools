@@ -48,6 +48,14 @@ export function RatioCanvas({ width, height, imageSrc, onFileDrop }: Props) {
 
   const valid = width > 0 && height > 0;
 
+  // react-dropzone's root props are typed with DOM drag/animation handlers that
+  // framer-motion redefines for its own gesture API. dropzone never sets those
+  // keys, so omit them from the type to reconcile the spread onto motion.div.
+  const rootProps = getRootProps() as Omit<
+    ReturnType<typeof getRootProps>,
+    "onAnimationStart" | "onDrag" | "onDragStart" | "onDragEnd"
+  >;
+
   return (
     <div
       ref={containerRef}
@@ -55,7 +63,7 @@ export function RatioCanvas({ width, height, imageSrc, onFileDrop }: Props) {
     >
       {valid && fit.w > 0 && (
         <motion.div
-          {...getRootProps()}
+          {...rootProps}
           className={cn(
             "relative rounded-md overflow-hidden flex items-center justify-center",
             !imageSrc &&
@@ -69,6 +77,9 @@ export function RatioCanvas({ width, height, imageSrc, onFileDrop }: Props) {
         >
           <input {...getInputProps()} />
           {imageSrc ? (
+            // Local object URL from a dropped file: next/image can't optimize a
+            // client-side blob, so a plain img is correct here.
+            // eslint-disable-next-line @next/next/no-img-element
             <img
               src={imageSrc}
               alt=""

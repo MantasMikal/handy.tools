@@ -17,7 +17,11 @@ export const BlobImage = (props: { src: Blob | File }) => {
   const [image, setImage] = useState<string | null>(null);
 
   useEffect(() => {
+    // The object URL is created here, after commit, so every URL that gets
+    // made is paired with the revoke in the cleanup below. Deriving it during
+    // render (e.g. useMemo) would leak on renders React discards.
     const url = fileOrBlobToUrl(src);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setImage(url);
     return () => {
       if (url) {

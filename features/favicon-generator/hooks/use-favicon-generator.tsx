@@ -3,7 +3,7 @@
 import { zipBlob } from "@/lib/zip-blob";
 import { MagickService } from "@/services/image-magick";
 
-import { useReducer, useEffect, useRef } from "react";
+import { useReducer, useEffect, useState } from "react";
 
 export type GenerateIconsOptions = {
   faviconSizes: number[];
@@ -61,11 +61,7 @@ function faviconGeneratorReducer(
  * @returns Object containing generator state and functions
  */
 export function useFaviconGenerator() {
-  const magickServiceRef = useRef<MagickService | null>(null);
-  if (magickServiceRef.current === null) {
-    magickServiceRef.current = new MagickService();
-  }
-  const magickService = magickServiceRef.current;
+  const [magickService] = useState(() => new MagickService());
 
   const [state, dispatch] = useReducer(faviconGeneratorReducer, {
     isReady: false,
