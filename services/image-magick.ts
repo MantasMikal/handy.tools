@@ -1,10 +1,20 @@
-import { convertSVGToPNG } from "@/features/favicon-generator/lib/convert-svg-to-png";
+import {
+  renderSvgToPng,
+  SvgRenderOptions,
+} from "@/features/favicon-generator/lib/render-svg-to-png";
 import {
   initializeImageMagick,
   ImageMagick,
   MagickImageCollection,
   MagickFormat,
+  MagickColor,
+  MagickColors,
+  MagickGeometry,
+  Gravity,
+  AlphaOption,
 } from "@imagemagick/magick-wasm";
+
+export type IconRenderOptions = SvgRenderOptions;
 
 export class MagickService {
   private initialized: boolean = false;
@@ -27,36 +37,42 @@ export class MagickService {
   }
 
   /**
-   * Generates a square PNG image of the specified size from the input file.
+   * Generates a square PNG icon of the specified size from the input file.
+   * The source keeps its aspect ratio and is centered on a square canvas,
+   * optionally scaled down and placed on a background color.
    * @param file - The source image file to process
-   * @param size - The desired width and height of the output image in pixels
-   * @returns Promise that resolves with a PNG Blob of the resized image
+   * @param size - The width and height of the output image in pixels
+   * @param options - Content scale and background color
+   * @returns Promise that resolves with a PNG Blob
    * @throws Error if ImageMagick is not initialized
    */
-  public async generateIcon(file: File, size: number): Promise<Blob> {
+  public async generateIcon(
+    file: File,
+    size: number,
+    options: IconRenderOptions = {}
+  ): Promise<Blob> {
     if (!this.initialized) {
       throw new Error("ImageMagick has not been initialized.");
     }
 
     if (file.type === "image/svg+xml") {
-      try {
-        const pngFile = await convertSVGToPNG(file, size, size);
-        return pngFile;
-      } catch (error) {
-        if (error instanceof Error) {
-          throw new Error(error.message);
-        }
-        throw new Error("Failed to convert SVG to PNG.");
-      }
+      return renderSvgToPng(file, size, options);
     }
 
-    return new Promise(async (resolve, reject) => {
-      try {
-        const imageBuffer = await file.arrayBuffer();
-        const imageData = new Uint8Array(imageBuffer);
+    const { contentScale = 1, background } = options;
+    const imageData = new Uint8Array(await file.arrayBuffer());
 
-        ImageMagick.read(imageData, async (image) => {
-          image.resize(size, size);
+    return new Promise((resolve, reject) => {
+      try {
+        ImageMagick.read(imageData, (image) => {
+          const contentSize = Math.round(size * contentScale);
+          image.resize(contentSize, contentSize);
+          image.alpha(AlphaOption.Set);
+          image.extent(
+            new MagickGeometry(size, size),
+            Gravity.Center,
+            background ? new MagickColor(background) : MagickColors.Transparent
+          );
           image.write(MagickFormat.Png, (data) => {
             resolve(new Blob([data], { type: "image/png" }));
           });
@@ -69,8 +85,10 @@ export class MagickService {
 
   /**
    * Generates a multi-size ICO favicon file from the input image.
+   * Each entry is padded to a transparent square so non-square sources
+   * produce valid square icons.
    * @param file - The source image file to process
-   * @param sizes - Array of sizes in pixels for the favicon (defaults to [16, 32, 48, 64])
+   * @param sizes - Array of sizes in pixels for the favicon
    * @returns Promise that resolves with an ICO Blob containing all specified sizes
    * @throws Error if ImageMagick is not initialized
    */
@@ -82,17 +100,16 @@ export class MagickService {
       throw new Error("ImageMagick has not been initialized.");
     }
 
-    return new Promise(async (resolve, reject) => {
+    let imageBlob: Blob = file;
+    if (file.type === "image/svg+xml") {
+      const largestSize = Math.max(...sizes);
+      imageBlob = await renderSvgToPng(file, largestSize);
+    }
+
+    const imageData = new Uint8Array(await imageBlob.arrayBuffer());
+
+    return new Promise((resolve, reject) => {
       try {
-        let imageFile = file;
-        if (file.type === "image/svg+xml") {
-          const largestSize = Math.max(...sizes);
-          imageFile = await convertSVGToPNG(file, largestSize, largestSize);
-        }
-
-        const imageBuffer = await imageFile.arrayBuffer();
-        const imageData = new Uint8Array(imageBuffer);
-
         ImageMagick.read(imageData, (image) => {
           const images = MagickImageCollection.create();
 
@@ -104,7 +121,14 @@ export class MagickService {
               return;
             }
             image.clone((img) => {
-              img.resize(sizes[index], sizes[index]);
+              const size = sizes[index];
+              img.resize(size, size);
+              img.alpha(AlphaOption.Set);
+              img.extent(
+                new MagickGeometry(size, size),
+                Gravity.Center,
+                MagickColors.Transparent
+              );
               images.push(img);
               cloneAndResize(index + 1);
             });

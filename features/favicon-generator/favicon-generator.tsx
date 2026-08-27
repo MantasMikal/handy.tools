@@ -3,7 +3,7 @@
 import Confetti from "react-confetti";
 import Dropzone from "@/components/ui/dropzone";
 import { ExclamationTriangleIcon, ReloadIcon } from "@radix-ui/react-icons";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Spinner } from "@/components/ui/spinner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -30,13 +30,14 @@ import {
 import { AccordionHeader } from "@radix-ui/react-accordion";
 
 const faviconSizeOptions = [16, 32, 48, 64, 128, 256, 512];
+const defaultFaviconSizes = [16, 32, 48];
 
 export default function FaviconGenerator() {
   const [showConfetti, setShowConfetti] = useState(false);
   const [isGenerated, setIsGenerated] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [options, setOptions] = useState<GenerateIconsOptions>({
-    faviconSizes: [16, 32, 48, 256],
+    faviconSizes: defaultFaviconSizes,
     themeColor: "#262626",
     backgroundColor: "#fefefe",
   });
@@ -49,22 +50,23 @@ export default function FaviconGenerator() {
     generateIcons,
   } = useFaviconGenerator();
 
+  const previewUrl = useMemo(
+    () => (files.length > 0 ? URL.createObjectURL(files[0]) : null),
+    [files]
+  );
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
+
   const handleFileAccepted = (file: File) => {
     setFiles([file]);
-
-    if (file.type === "image/svg+xml") {
-      setOptions((prevOptions) => ({
-        ...prevOptions,
-        faviconSizes: [16, 32, 48],
-      }));
-    }
-
-    if (file.type === "image/png") {
-      setOptions((prevOptions) => ({
-        ...prevOptions,
-        faviconSizes: [16, 32, 48, 256],
-      }));
-    }
+    setOptions((prevOptions) => ({
+      ...prevOptions,
+      faviconSizes: defaultFaviconSizes,
+    }));
   };
 
   const handleFaviconSizesChange = (size: number) => {
@@ -128,10 +130,10 @@ export default function FaviconGenerator() {
             {isFaviconGeneratorLoading && (
               <Spinner className="absolute inset-0 m-auto w-12 h-12" />
             )}
-            {!isGenerated && files.length > 0 && (
+            {!isGenerated && previewUrl && (
               <div className="relative w-full h-full flex bg-black rounded-md md:overflow-hidden">
                 <Image
-                  src={URL.createObjectURL(files[0])}
+                  src={previewUrl}
                   alt="Uploaded file"
                   className="w-full h-full object-contain"
                   fill
@@ -234,8 +236,9 @@ export default function FaviconGenerator() {
                   <p className="text-sm">
                     This generator creates a complete, modern favicon set
                     including a multi-size .ico file, PWA-ready icons (192x192,
-                    512x512), Apple Touch Icon, Microsoft Tile Icon, and a web
-                    manifest with your theme colors. It follows the{" "}
+                    512x512), a maskable icon, an Apple Touch Icon flattened
+                    onto your background color, and a web manifest with your
+                    theme colors. It follows the{" "}
                     <Button variant="link" asChild className="h-auto p-0">
                       <Link
                         href="https://evilmartians.com/chronicles/how-to-favicon-in-2021-six-files-that-fit-most-needs"

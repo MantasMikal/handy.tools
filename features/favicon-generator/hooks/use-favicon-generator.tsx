@@ -61,7 +61,11 @@ function faviconGeneratorReducer(
  * @returns Object containing generator state and functions
  */
 export function useFaviconGenerator() {
-  const magickServiceRef = useRef<MagickService>(new MagickService());
+  const magickServiceRef = useRef<MagickService | null>(null);
+  if (magickServiceRef.current === null) {
+    magickServiceRef.current = new MagickService();
+  }
+  const magickService = magickServiceRef.current;
 
   const [state, dispatch] = useReducer(faviconGeneratorReducer, {
     isReady: false,
@@ -79,25 +83,32 @@ export function useFaviconGenerator() {
   const generateIcons = async (file: File, options: GenerateIconsOptions) => {
     try {
       dispatch({ type: "GENERATE_FAVICON_START" });
-      const { faviconSizes } = options;
+      const { faviconSizes, backgroundColor } = options;
       const isSvg = file.type === "image/svg+xml";
 
+      // iOS composites transparent touch icons onto black, and maskable
+      // icons get cropped to the safe zone, so both are flattened onto the
+      // background color with the artwork scaled down.
       const config = [
-        {
-          size: 256,
-          name: "mstile-256x256.png",
-        },
         {
           size: 180,
           name: "apple-touch-icon.png",
+          render: { contentScale: 0.85, background: backgroundColor },
         },
         {
           size: 192,
           name: "icon-192x192.png",
+          render: {},
         },
         {
           size: 512,
           name: "icon-512x512.png",
+          render: {},
+        },
+        {
+          size: 512,
+          name: "icon-maskable-512x512.png",
+          render: { contentScale: 0.7, background: backgroundColor },
         },
       ];
 
@@ -107,14 +118,11 @@ export function useFaviconGenerator() {
         options
       );
 
-      const favicon = await magickServiceRef.current.generateFavicon(
-        file,
-        faviconSizes
-      );
+      const favicon = await magickService.generateFavicon(file, faviconSizes);
 
       const icons = await Promise.all(
-        config.map(async ({ size, name }) => {
-          const blob = await magickServiceRef.current.generateIcon(file, size);
+        config.map(async ({ size, name, render }) => {
+          const blob = await magickService.generateIcon(file, size, render);
           return { name, blob };
         })
       );
@@ -184,6 +192,12 @@ export function useFaviconGenerator() {
           type: "image/png",
           sizes: "512x512",
         },
+        {
+          src: "/icon-maskable-512x512.png",
+          type: "image/png",
+          sizes: "512x512",
+          purpose: "maskable",
+        },
       ],
       start_url: ".",
       theme_color: themeColor,
@@ -196,32 +210,34 @@ export function useFaviconGenerator() {
   };
 
   useEffect(() => {
-    const magickService = magickServiceRef.current;
-    if (!magickService) return;
-    const isReady = magickService.isReady();
-
-    if (isReady) {
-      console.log("Magick is ready");
+    if (magickService.isReady()) {
       dispatch({ type: "INIT_SUCCESS" });
       return;
     }
 
-    if (!isReady) {
-      dispatch({ type: "INIT_START" });
-      magickService
-        .initMagick()
-        .then(() => {
-          dispatch({ type: "INIT_SUCCESS" });
-        })
-        .catch((error) => {
-          dispatch({ type: "INIT_FAILURE", payload: error.message });
+    dispatch({ type: "INIT_START" });
+    magickService
+      .initMagick()
+      .then(() => {
+        dispatch({ type: "INIT_SUCCESS" });
+      })
+      .catch((error) => {
+        dispatch({
+          type: "INIT_FAILURE",
+          payload: {
+            type: "Initialization error",
+            message:
+              error instanceof Error
+                ? error.message
+                : "Failed to load the image processor.",
+          },
         });
-    }
-  }, [magickServiceRef]);
+      });
+  }, [magickService]);
 
   return {
     ...state,
     generateIcons,
-    magickService: magickServiceRef.current,
+    magickService,
   };
 }

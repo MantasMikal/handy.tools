@@ -388,28 +388,6 @@ class MetaValidatorService {
         },
       },
       {
-        title: "Microsoft Tile Image",
-        description:
-          "Checks if the page has a Microsoft Tile Image which is used for Windows 8/10/11 tiles.",
-        check: async (data: MetaTag[], baseUrl: string) => {
-          const metaTag = data.find(
-            (tag) =>
-              tag.tag === "meta" &&
-              tag.attributes.name === "msapplication-TileImage" &&
-              tag.attributes.content
-          );
-          if (!metaTag) {
-            return {
-              errors: ["Microsoft Tile Image meta tag is missing"],
-              successes: [],
-            };
-          }
-          const href = this.resolveUrl(baseUrl, metaTag.attributes.content);
-          const result = await this.validateIcon(href, "image/png", 256, 256);
-          return result;
-        },
-      },
-      {
         title: "Web App Manifest",
         description: "Checks if the page has a web app manifest",
         check: async (data: MetaTag[]) => {

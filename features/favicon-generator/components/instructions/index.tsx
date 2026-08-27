@@ -6,7 +6,6 @@ import Link from "next/link";
 
 export type CodeOptions = {
   themeColor: string;
-  backgroundColor: string;
 };
 
 type InstructionsProps = {
@@ -55,6 +54,11 @@ export function Instructions(props: InstructionsProps) {
           />
         </TabsContent>
       </Tabs>
+      <p className="p-2 text-sm text-muted-foreground">
+        The generated site.webmanifest contains placeholder names. Open it and
+        set <code>name</code> and <code>short_name</code> to your site&apos;s
+        name.
+      </p>
       <div className="p-2 w-full mt-auto flex items-center justify-between gap-2 border bg-background rounded-md">
         <p className="p-2 text-base">
           Done? Use the meta verification tool to verify that everything is in
