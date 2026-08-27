@@ -21,9 +21,7 @@ export type PresetOptions =
   | "veryslow";
 
 export type TranscodeOptions = {
-  codec?: string;
   quality?: number;
-  format?: string;
   scale?: number;
   preset?: PresetOptions;
   fps?: number;
@@ -47,11 +45,11 @@ export type PreviewOutput = {
 };
 
 const DEFAULT_PREVIEW_DURATION = 3;
-const DEFAULT_CODEC = "libx264";
 const DEFAULT_QUALITY = 100;
 const DEFAULT_SCALE = 1;
 const DEFAULT_REMOVE_AUDIO = false;
 const DEFAULT_FPS = 30;
+const DEFAULT_PRESET: PresetOptions = "superfast";
 const INPUT_DIR = "/input";
 const TIMEOUT = -1;
 
@@ -161,12 +159,11 @@ export class FFmpegService {
    */
   transcodeOptionsToArgs(options: TranscodeOptions) {
     const {
-      codec = DEFAULT_CODEC,
       quality = DEFAULT_QUALITY,
       scale = DEFAULT_SCALE,
       fps = DEFAULT_FPS,
       removeAudio = DEFAULT_REMOVE_AUDIO,
-      preset,
+      preset = DEFAULT_PRESET,
     } = options;
 
     const args = ["-threads", "2"];
@@ -177,22 +174,24 @@ export class FFmpegService {
       args.push("-c:a", "copy");
     }
 
-    if (codec) {
+    args.push(
+      "-c:v",
+      "libx264",
       // Force 8-bit 4:2:0; browsers cannot play 4:2:2 or 10-bit h264
-      args.push("-c:v", codec, "-pix_fmt", "yuv420p");
-    }
-
-    if (quality) {
-      args.push("-crf", qualityToCrf(quality).toString());
-    }
+      "-pix_fmt",
+      "yuv420p",
+      "-crf",
+      qualityToCrf(quality).toString(),
+      "-preset",
+      preset,
+      // moov atom up front so browsers can start playback while streaming
+      "-movflags",
+      "+faststart"
+    );
 
     if (scale && scale < 1) {
       const scaledWidth = `round(iw*${scale}/2)*2`;
       args.push("-vf", `scale=${scaledWidth}:-2`);
-    }
-
-    if (preset) {
-      args.push("-preset", preset);
     }
 
     if (fps) {
@@ -257,7 +256,7 @@ export class FFmpegService {
     await this.ffmpeg.deleteDir(inputDir);
 
     return {
-      file: new Blob([data.buffer], { type: `video/mp4` }),
+      file: new Blob([data.buffer], { type: "video/mp4" }),
       name: outputFileName,
     };
   }

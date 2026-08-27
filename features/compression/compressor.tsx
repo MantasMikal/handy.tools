@@ -58,7 +58,9 @@ export default function Compressor() {
     isLoading: isFfmpegLoading,
     isTranscoding,
     isGeneratingPreview,
+    isProcessingThumbnail,
     generateVideoPreview,
+    extractThumbnail,
     progress,
     transcode,
   } = useFfmpeg();
@@ -80,6 +82,15 @@ export default function Compressor() {
     setShowConfetti(true);
     const { file: output, name } = result;
     downloadFile(output, name);
+  };
+
+  const handleDownloadPoster = async () => {
+    const file = files[0];
+    if (!file) return;
+    const result = await extractThumbnail(file);
+    if (!result) return;
+    const baseName = file.name.split(".").slice(0, -1).join(".") || file.name;
+    downloadFile(result.thumbnail, `${baseName}-poster.webp`);
   };
 
   const handleFileAccepted = async (acceptedFiles: File[]) => {
@@ -284,6 +295,18 @@ export default function Compressor() {
                       {isGeneratingPreview ? "Processing" : "Generate Preview"}
                     </Button>
                   )}
+                  <Button
+                    className="flex-1"
+                    variant="secondary"
+                    onClick={handleDownloadPoster}
+                    disabled={isDisabled || isProcessingThumbnail}
+                    title="Extract the first frame as a WebP image to use as the video's poster"
+                  >
+                    {isProcessingThumbnail && (
+                      <ReloadIcon className="mr-2 h-4 w-4 animate-spin" />
+                    )}
+                    {isProcessingThumbnail ? "Extracting" : "Download Poster"}
+                  </Button>
                 </div>
               </motion.div>
             )}

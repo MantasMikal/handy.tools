@@ -1,16 +1,16 @@
 /**
- * Converts a slider value (0-100) to a CRF value (23-51) for ffmpeg.
+ * Converts a slider value (0-100) to a CRF value for ffmpeg.
  * @param {number} quality - The quality value from the slider (0-100).
- * @returns {number} - The corresponding CRF value (23-51).
+ * @param {number} bestCrf - CRF at quality 100 (defaults to the x264 range).
+ * @param {number} worstCrf - CRF at quality 0.
+ * @returns {number} - The corresponding CRF value.
  */
-export const qualityToCrf = (quality: number): number => {
-  // Ensure quality is within 0-100
+export const qualityToCrf = (
+  quality: number,
+  bestCrf = 23,
+  worstCrf = 51
+): number => {
   const clampedQuality = Math.min(Math.max(quality, 0), 100);
-
-  // Map the slider value to a CRF value
-  // Quality 0 maps to CRF 51, Quality 100 maps to CRF 23
-  const crf = 51 - (clampedQuality / 100) * (51 - 23);
-
-  // Round to the nearest integer
+  const crf = worstCrf - (clampedQuality / 100) * (worstCrf - bestCrf);
   return Math.round(crf);
 };
