@@ -70,20 +70,27 @@
   }
 }
 
+@property --sweep-run {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
 ::view-transition-old(root) {
   animation: none;
 }
 ::view-transition-new(root) {
-  animation: theme-sweep 0.45s cubic-bezier(0.32, 0.72, 0, 1);
+  clip-path: circle(
+    var(--sweep-run) at var(--sweep-x, 50%) var(--sweep-y, 50%)
+  );
+  animation: theme-sweep 0.45s cubic-bezier(0.32, 0.72, 0, 1) forwards;
 }
 
 @keyframes theme-sweep {
   from {
-    clip-path: circle(0 at var(--sweep-x, 50%) var(--sweep-y, 50%));
+    --sweep-run: 0px;
   }
   to {
-    clip-path: circle(
-      var(--sweep-r, 150vmax) at var(--sweep-x, 50%) var(--sweep-y, 50%)
-    );
+    --sweep-run: var(--sweep-r, 150vmax);
   }
 }
